@@ -1,0 +1,33 @@
+syntax = "proto3";
+
+package main;
+
+option go_package="./gbp";
+
+message Transport {
+    bytes Msg = 1;
+    string Id = 2;
+    int32 Tp = 3;
+}
+
+message HandshakeDeleteNotify {
+    string SenderMID = 1;
+    string TargetMID = 2;
+    string Number = 3;
+    string Mloc = 4;
+}
+
+message ChangeProfilePayloads {
+    repeated string all = 1;
+    string PicData = 2;
+    string SenderMID = 3;
+}
+
+message NotifyChangeNumber {
+    repeated string all = 1;
+    string Number = 2;
+    string SenderMID = 3;
+}
+
+// export PATH=$PATH:~/go/bin
+// protoc -I. --go_out=. ./gbProto.proto
