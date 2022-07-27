@@ -28,6 +28,7 @@ func runAPIs(serverIP string, m *mongoAction.Mongo, r *redisAction.Redis, rmq *r
 	router.HandleFunc("/sendotp", api.VerifyNumber).Methods("POST")
 	router.HandleFunc("/verifyotp", api.VarifyNumberOTP).Methods("POST")
 	router.HandleFunc("/login", api.LoginUser).Methods("POST")
+	router.HandleFunc("/logout", api.LogOut).Methods("POST")
 	router.HandleFunc("/delete", api.DeleteUser).Methods("POST")
 	router.HandleFunc("/toggleblock", api.ToggleBlock).Methods("POST")
 	router.HandleFunc("/checkUser", api.CheckAwailibity).Methods("POST")

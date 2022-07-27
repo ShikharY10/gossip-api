@@ -12,6 +12,7 @@ type UserData struct {
 	Password    string         `bson:"password,omitempty"`
 	Blocked     map[string]int `bson.M:"blocked,omitempty"`
 	Connections map[string]int `bson.A:"connections,omitempty"`
+	Logout      bool           `bson:"logout,omitempty"`
 }
 
 type NewUser struct {
@@ -45,10 +46,10 @@ type OperationId struct {
 	Id string `json:"id"`
 }
 
-type LoginStruct struct {
-	Target     string `json:"number"`
-	Password   string `json:"password"`
-	TargetType string `json:"target_type"`
+type LoginRequest struct {
+	Number    string `json:"number"`
+	Password  string `json:"password"`
+	PublicKey string `json:"publickey"`
 }
 
 type LoginSuccessPaylaod struct {
@@ -110,4 +111,8 @@ type UpdateNumber struct {
 type UpdateEmailPayload struct {
 	Email string `json:"email"`
 	MID   string `json:"mid"`
+}
+
+type LogOutRequest struct {
+	Mid string `json:"mid"`
 }

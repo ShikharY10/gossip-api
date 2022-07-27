@@ -77,7 +77,6 @@ func (a *API) NewUser(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		log.Println(err.Error())
 	}
-	fmt.Println("userdata: ", newUserdata)
 	id, _ := a.Mongo.AddUserMsgField()
 	newUserdata.MsgId = id
 
@@ -114,6 +113,7 @@ func (a *API) NewUser(w http.ResponseWriter, r *http.Request) {
 	uD.Password = newUserdata.Password
 	uD.PhoneNo = newUserdata.PhoneNo
 	uD.ProfilePic = newUserdata.ProfilePic
+	uD.Logout = false
 
 	// fmt.Println("uD: ", uD)
 	uid, err := a.Mongo.AddUser(uD)
@@ -149,52 +149,105 @@ func (a *API) LoginUser(w http.ResponseWriter, r *http.Request) {
 		json.NewEncoder(w).Encode(s)
 		return
 	}
-	var loginData utils.LoginStruct
+	var loginData utils.LoginRequest
 	_ = json.NewDecoder(r.Body).Decode(&loginData)
-	var userData utils.NewUser
-	if loginData.TargetType == "mobile-no" {
-		_, err := a.Mongo.ReadUserDataByMNo(loginData.Target)
-		if err != nil {
-			var s utils.SuccessStruct
-			s.Status = "unsuccessful"
-			s.Disc = "Mobile number not matched"
-			json.NewEncoder(w).Encode(s)
-			return
-		}
-		// userData = *udata
-	}
 
-	if loginData.TargetType == "email" {
-		_, err := a.Mongo.ReadUserDataByMID(loginData.Target)
-		if err != nil {
-			var s utils.SuccessStruct
-			s.Status = "unsuccessful"
-			s.Disc = "Email not matched"
-			json.NewEncoder(w).Encode(s)
-			return
-		}
-		// userData = *udata
-	}
-
-	fmt.Println("loginData: ", loginData)
-	fmt.Println("userData: ", userData)
-
-	if userData.Password == loginData.Password {
-		var payload utils.LoginSuccessPaylaod
-		payload.MsgId = userData.MsgId
-		payload.Name = userData.Name
-		payload.Age = userData.Age
-		payload.PhoneNo = userData.PhoneNo
-		payload.Email = userData.Email
-		payload.ProfilePic = userData.ProfilePic
-		payload.MainKey = userData.MainKey
-		json.NewEncoder(w).Encode(payload)
-		return
-	} else {
+	myData, err := a.Mongo.ReadUserDataByMNo(loginData.Number)
+	if err != nil {
 		var s utils.SuccessStruct
 		s.Status = "unsuccessful"
-		s.Disc = "Password not matched"
+		s.Disc = "Mobile number not matched"
 		json.NewEncoder(w).Encode(s)
+		return
+	}
+
+	if myData.Password == loginData.Password {
+		var loginResponsePayload gbp.LoginResponse
+		var loginEnginePayload gbp.LoginEnginePayload
+
+		var myDataPayload gbp.UserData
+		myDataPayload.Dob = myData.Age
+		myDataPayload.Email = myData.Email
+		myDataPayload.Gender = myData.Gender
+		myDataPayload.MainKey = myData.MainKey
+		myDataPayload.Mid = myData.MsgId
+		myDataPayload.Name = myData.Name
+		myDataPayload.Number = myData.PhoneNo
+		myDataPayload.ProfilePic = myData.ProfilePic
+
+		loginResponsePayload.MyData = &myDataPayload
+
+		loginEnginePayload.SenderMid = myData.MsgId
+		loginEnginePayload.PublicKey = loginData.PublicKey
+
+		var allConn []string
+		var connDatalist []*gbp.ConnectionData = []*gbp.ConnectionData{}
+		for mid := range myData.Connections {
+
+			connData, err := a.Mongo.GetUserDataByMID(mid)
+			if err != nil {
+				continue
+			}
+
+			if !connData.Logout {
+				allConn = append(allConn, mid)
+			}
+
+			var connDataPayload gbp.ConnectionData
+			connDataPayload.Mid = connData.MsgId
+			connDataPayload.Name = connData.Name
+			connDataPayload.Number = connData.PhoneNo
+			connDataPayload.ProfilePic = connData.ProfilePic
+			connDataPayload.Logout = connData.Logout
+			connDatalist = append(connDatalist, &connDataPayload)
+		}
+
+		loginResponsePayload.ConnData = connDatalist
+		loginEnginePayload.AllConn = allConn
+
+		enginePayloadBytes, err := proto.Marshal(&loginEnginePayload)
+		if err != nil {
+			var s utils.SuccessStruct
+			s.Status = "unsuccessful"
+			s.Disc = "something went wrong"
+			json.NewEncoder(w).Encode(s)
+			return
+		}
+
+		var trans gbp.Transport
+		trans.Id = ""
+		trans.Msg = enginePayloadBytes
+		trans.Tp = 10
+		transBytes, err := proto.Marshal(&trans)
+		if err != nil {
+			var s utils.SuccessStruct
+			s.Disc = "proto marshal error"
+			s.Status = "unsuccessful"
+			json.NewEncoder(w).Encode(s)
+			return
+		}
+		engineName := a.RMQ.GetEngineChannel()
+		a.RMQ.Produce(engineName, transBytes)
+
+		userPayloadBytes, err := proto.Marshal(&loginResponsePayload)
+		if err != nil {
+			var s utils.SuccessStruct
+			s.Status = "unsuccessful"
+			s.Disc = "something went wrong"
+			json.NewEncoder(w).Encode(s)
+			return
+		}
+
+		var response gbp.Response
+		response.Status = true
+		response.Disc = "ok"
+		response.Data = utils.Encode(userPayloadBytes)
+		responseBytes, err := proto.Marshal(&response)
+		if err != nil {
+			log.Println("[marshal error]", err.Error())
+		}
+		w.Write(responseBytes)
+		a.Mongo.UpdateLogoutStatus(myData.MsgId, false)
 		return
 	}
 }
@@ -586,4 +639,36 @@ func (a *API) UpdateEmail(w http.ResponseWriter, r *http.Request) {
 		fmt.Println("Email is changed")
 		return
 	}
+}
+
+func (a *API) LogOut(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+	if r.Body == nil {
+		var s utils.SuccessStruct
+		s.Disc = "Please send relevent data!"
+		s.Status = "Unsuccessful"
+		json.NewEncoder(w).Encode(s)
+		return
+	}
+
+	var logoutReq utils.LogOutRequest
+	err := json.NewDecoder(r.Body).Decode(&logoutReq)
+	if err != nil {
+		log.Println(err.Error())
+	}
+
+	res := a.Mongo.UpdateLogoutStatus(logoutReq.Mid, true)
+	if res {
+		var response gbp.Response
+		response.Status = true
+		response.Disc = "logout status changed to true"
+		response.Data = ""
+		responseBytes, err := proto.Marshal(&response)
+		if err != nil {
+			log.Println("[marshal error]", err.Error())
+		}
+		w.Write(responseBytes)
+		return
+	}
+
 }

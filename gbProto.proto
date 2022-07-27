@@ -29,5 +29,41 @@ message NotifyChangeNumber {
     string SenderMID = 3;
 }
 
+message UserData {
+    string Name = 1;
+    string Dob = 2;
+    string Gender = 3;
+    string Number = 4;
+    string Email = 5;
+    string Mid = 6;
+    string MainKey = 7;
+    string ProfilePic = 8;
+}
+
+message ConnectionData {
+    string Name = 1;
+    string Number = 2;
+    string Mid = 3;
+    string ProfilePic = 4;
+    bool Logout = 5;
+}
+
+message LoginResponse {
+    UserData MyData = 1;
+    repeated ConnectionData ConnData = 2;
+}
+
+message LoginEnginePayload {
+    repeated string AllConn = 1;
+    string SenderMid = 2;
+    string PublicKey = 3;
+}
+
+message Response {
+    bool Status = 1;
+    string Disc = 2;
+    string Data = 3;
+}
+
 // export PATH=$PATH:~/go/bin
 // protoc -I. --go_out=. ./gbProto.proto

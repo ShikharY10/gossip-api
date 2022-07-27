@@ -184,13 +184,20 @@ func (m *Mongo) ReadUserDataById(id string) (*utils.UserData, error) {
 	return udata, nil
 }
 
-func (m *Mongo) ReadUserDataByMNo(number string) (*utils.UserData, error) {
-	filter := bson.M{"phoneno": number}
-	udata, err := m.ReadUserData(filter)
+func (m *Mongo) ReadUserDataByMNo(number string) (utils.UserData, error) {
+	cursor, err := m.UserCollection.Find(
+		context.TODO(),
+		bson.M{"phone_no": number},
+	)
 	if err != nil {
-		return nil, err
+		log.Println("[MONGOGETERROR] : ", err.Error())
 	}
-	return udata, nil
+	var userd []utils.UserData
+	err = cursor.All(context.TODO(), &userd)
+	if err != nil {
+		log.Println("[MONGOCURSORERROR] : ", err.Error())
+	}
+	return userd[0], nil
 }
 
 func (m *Mongo) ReadUserDataByMID(mid string) (*utils.UserData, error) {
@@ -316,4 +323,17 @@ func (m *Mongo) GetNUMIdByMsgId(mid string) string {
 		log.Println("[MONGOCURSORERROR] : ", err.Error())
 	}
 	return userd[0].PhoneNo
+}
+
+func (m *Mongo) UpdateLogoutStatus(mid string, status bool) bool {
+	filter := bson.M{"msgid": mid}
+	update := bson.M{"$set": bson.M{"logout": status}}
+	result, err := m.UserCollection.UpdateOne(context.Background(), filter, update)
+	if err != nil {
+		return false
+	}
+	if result.MatchedCount == 1 {
+		return true
+	}
+	return false
 }
