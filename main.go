@@ -61,23 +61,11 @@ func runAPIs(serverIP string, m *mongoAction.Mongo, r *redisAction.Redis, rmq *r
 
 	router.HandleFunc("/api/v2", apiv2).Methods("GET")
 	router.HandleFunc("/api/v2/sendotp/{number}", api_v2.SendOTP).Methods("GET")
+	router.HandleFunc("/api/v2/varifyotp", api_v2.VarifyOTP).Methods("POST")
 
 	log.Fatal(http.ListenAndServe(serverIP+":8080", router))
 }
 
-// @Version 1.0.0
-// @Title Backend API
-// @Description API usually works as expected. But sometimes its not true.
-// @ContactName Parvez
-// @ContactEmail abce@email.com
-// @ContactURL http://someurl.oxox
-// @TermsOfServiceUrl http://someurl.oxox
-// @LicenseName MIT
-// @LicenseURL https://en.wikipedia.org/wiki/MIT_License
-// @Server http://www.fake.com Server-1
-// @Server http://www.fake2.com Server-2
-// @Security AuthorizationHeader read write
-// @SecurityScheme AuthorizationHeader http bearer Input your token
 func main() {
 
 	var mongoIP string = "127.0.0.1"

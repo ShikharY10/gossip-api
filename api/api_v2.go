@@ -9,6 +9,7 @@ import (
 	"github.com/ShikharY10/goAPI/mongoAction"
 	"github.com/ShikharY10/goAPI/redisAction"
 	"github.com/ShikharY10/goAPI/rmq"
+	"github.com/ShikharY10/goAPI/utils"
 	"github.com/gorilla/mux"
 	"google.golang.org/protobuf/proto"
 )
@@ -44,5 +45,30 @@ func (a *API_V2) SendOTP(w http.ResponseWriter, r *http.Request) {
 }
 
 func (a *API_V2) VarifyOTP(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Add("service", "Gossip API")
+	var response gbp.Response
 
+	if r.Body == nil {
+		response.Status = false
+		response.Disc = "empty body"
+	} else {
+		var __otp utils.VOTP
+		_ = json.NewDecoder(r.Body).Decode(&__otp)
+		res := a.Redis.VarifyOTP(__otp.Id, __otp.Otp)
+
+		if res {
+			response.Status = true
+			response.Disc = "number varified"
+		} else {
+			response.Status = false
+			response.Disc = "wrong otp"
+		}
+	}
+	response.Data = ""
+	responseBytes, err := proto.Marshal(&response)
+	if err != nil {
+		log.Println("[marshal error]", err.Error())
+	}
+	w.Write(responseBytes)
 }

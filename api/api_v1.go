@@ -82,14 +82,6 @@ func (a *API_V1) NewUser(w http.ResponseWriter, r *http.Request) {
 	id, _ := a.Mongo.AddUserMsgField()
 	newUserdata.MsgId = id
 
-	// o := a.Redis.Client.Get(userdata.MsgId)
-	// if o.Err() != nil {
-	// 	var s utils.SuccessStruct
-	// 	s.Status = "unsuccessful"
-	// 	s.Disc = "Session Timeout"
-	// 	json.NewEncoder(w).Encode(s)
-	// 	return
-	// }
 	aes_key := utils.GenerateAesKey(32)
 	fmt.Println([]byte(newUserdata.MainKey))
 	publicKey, err := utils.LoadKey([]byte(newUserdata.MainKey))
