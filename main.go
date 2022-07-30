@@ -18,27 +18,66 @@ type MAIN struct {
 	MongoDB *mongoAction.Mongo
 }
 
+func home(w http.ResponseWriter, r *http.Request) {
+	w.Write([]byte("Gossip API Test Home Route..."))
+}
+
+func apiv1(w http.ResponseWriter, r *http.Request) {
+	w.Write([]byte("Version 1 APIs..."))
+}
+
+func apiv2(w http.ResponseWriter, r *http.Request) {
+	w.Write([]byte("Version 2 APIs..."))
+}
+
 func runAPIs(serverIP string, m *mongoAction.Mongo, r *redisAction.Redis, rmq *rmq.RMQ) {
-	var api userAPI.API
-	api.Mongo = m
-	api.Redis = r
-	api.RMQ = rmq
+	var api_v1 userAPI.API_V1
+	api_v1.Mongo = m
+	api_v1.Redis = r
+	api_v1.RMQ = rmq
+
+	var api_v2 userAPI.API_V2
+	api_v2.Mongo = m
+	api_v2.Redis = r
+	api_v2.RMQ = rmq
+
 	router := mux.NewRouter().StrictSlash(true)
-	router.HandleFunc("/newuser", api.NewUser).Methods("POST")
-	router.HandleFunc("/sendotp", api.VerifyNumber).Methods("POST")
-	router.HandleFunc("/verifyotp", api.VarifyNumberOTP).Methods("POST")
-	router.HandleFunc("/login", api.LoginUser).Methods("POST")
-	router.HandleFunc("/logout", api.LogOut).Methods("POST")
-	router.HandleFunc("/delete", api.DeleteUser).Methods("POST")
-	router.HandleFunc("/toggleblock", api.ToggleBlock).Methods("POST")
-	router.HandleFunc("/checkUser", api.CheckAwailibity).Methods("POST")
-	router.HandleFunc("/removehs", api.RemoveHandshake).Methods("POST")
-	router.HandleFunc("/uprofile", api.UpdateProfilePicture).Methods("POST")
-	router.HandleFunc("/unumber", api.UpdateNumber).Methods("POST")
-	router.HandleFunc("/uemail", api.UpdateEmail).Methods("POST")
+
+	// Routes
+	router.HandleFunc("/", home).Methods("GET")
+	router.HandleFunc("/api/v1", apiv1).Methods("GET")
+	router.HandleFunc("/api/v1/newuser", api_v1.NewUser).Methods("POST")
+	router.HandleFunc("/api/v1/sendotp", api_v1.VerifyNumber).Methods("POST")
+	router.HandleFunc("/api/v1/verifyotp", api_v1.VarifyNumberOTP).Methods("POST")
+	router.HandleFunc("/api/v1/login", api_v1.LoginUser).Methods("POST")
+	router.HandleFunc("/api/v1/logout", api_v1.LogOut).Methods("POST")
+	router.HandleFunc("/api/v1/delete", api_v1.DeleteUser).Methods("POST")
+	router.HandleFunc("/api/v1/toggleblock", api_v1.ToggleBlock).Methods("POST")
+	router.HandleFunc("/api/v1/checkUser", api_v1.CheckAwailibity).Methods("POST")
+	router.HandleFunc("/api/v1/removehs", api_v1.RemoveHandshake).Methods("POST")
+	router.HandleFunc("/api/v1/uprofile", api_v1.UpdateProfilePicture).Methods("POST")
+	router.HandleFunc("/api/v1/unumber", api_v1.UpdateNumber).Methods("POST")
+	router.HandleFunc("/api/v1/uemail", api_v1.UpdateEmail).Methods("POST")
+
+	router.HandleFunc("/api/v2", apiv2).Methods("GET")
+	router.HandleFunc("/api/v2/sendotp/{number}", api_v2.SendOTP).Methods("GET")
+
 	log.Fatal(http.ListenAndServe(serverIP+":8080", router))
 }
 
+// @Version 1.0.0
+// @Title Backend API
+// @Description API usually works as expected. But sometimes its not true.
+// @ContactName Parvez
+// @ContactEmail abce@email.com
+// @ContactURL http://someurl.oxox
+// @TermsOfServiceUrl http://someurl.oxox
+// @LicenseName MIT
+// @LicenseURL https://en.wikipedia.org/wiki/MIT_License
+// @Server http://www.fake.com Server-1
+// @Server http://www.fake2.com Server-2
+// @Security AuthorizationHeader read write
+// @SecurityScheme AuthorizationHeader http bearer Input your token
 func main() {
 
 	var mongoIP string = "127.0.0.1"
