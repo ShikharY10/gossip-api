@@ -62,6 +62,7 @@ func runAPIs(serverIP string, m *mongoAction.Mongo, r *redisAction.Redis, rmq *r
 	router.HandleFunc("/api/v2", apiv2).Methods("GET")
 	router.HandleFunc("/api/v2/sendotp/{number}", api_v2.SendOTP).Methods("GET")
 	router.HandleFunc("/api/v2/varifyotp", api_v2.VarifyOTP).Methods("POST")
+	router.HandleFunc("/api/v2/createnewuser", api_v2.CreateNewUser).Methods("POST")
 
 	log.Fatal(http.ListenAndServe(serverIP+":8080", router))
 }
