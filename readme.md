@@ -3,9 +3,6 @@
 
 An API server that is written in go and provide APIs for signup, signin, etc.
 
-<video src='utils/video/myvideo.mp4' width=1000 height=300/>
-
-
 ### API Documentation
 
 #### Base Path:
