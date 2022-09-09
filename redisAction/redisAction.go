@@ -140,6 +140,20 @@ func (r *Redis) VarifyOTP(id string, otp string) bool {
 	}
 }
 
+func (r *Redis) GetSecretekey() (string, error) {
+	res := r.Client.Get("secretekey")
+	if res.Err() != nil {
+		return "", res.Err()
+	}
+	key := res.Val()
+	return key, nil
+}
+
+func (r *Redis) SetSecretekey(key string) bool {
+	res := r.Client.Set("secretekey", key, 0)
+	return res.Err() == nil
+}
+
 func (r *Redis) GetEngineName() []string {
 	fmt.Println("readig engines names")
 	ress := r.Client.LRange("engines", 0, -1)

@@ -51,6 +51,7 @@ message ConnectionData {
 message LoginResponse {
     UserData MyData = 1;
     repeated ConnectionData ConnData = 2;
+    string Token = 3;
 }
 
 message LoginEnginePayload {

@@ -11,7 +11,6 @@ import (
 	"github.com/ShikharY10/goAPI/redisAction"
 	"github.com/ShikharY10/goAPI/rmq"
 	"github.com/ShikharY10/goAPI/utils"
-	"github.com/gorilla/mux"
 	"google.golang.org/protobuf/proto"
 )
 
@@ -21,8 +20,12 @@ type API_V1 struct {
 	RMQ   *rmq.RMQ
 }
 
+func (a *API_V1) Apiv1(w http.ResponseWriter, r *http.Request) {
+	w.Write([]byte("Version 1 APIs..."))
+}
+
 func (a *API_V1) VerifyNumber(w http.ResponseWriter, r *http.Request) {
-	mux.Vars(r)
+	// mux.Vars(r)
 	w.Header().Set("Content-Type", "application/json")
 	if r.Body == nil {
 		var s utils.SuccessStruct

@@ -2,6 +2,7 @@ package mongoAction
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log"
 
@@ -13,10 +14,11 @@ import (
 )
 
 type Mongo struct {
-	Ctx            context.Context
-	Client         *mongo.Client
-	UserCollection *mongo.Collection
-	MsgCollection  *mongo.Collection
+	Ctx              context.Context
+	Client           *mongo.Client
+	UserCollection   *mongo.Collection
+	MsgCollection    *mongo.Collection
+	ServerCollection *mongo.Collection
 }
 
 func (m *Mongo) Init(mongoIP string, username string, password string) {
@@ -35,13 +37,31 @@ func (m *Mongo) Init(mongoIP string, username string, password string) {
 		log.Fatal(err)
 	}
 
+	var sKey string = "aeofh2983rh293hf2infd20i3fjd023j"
+
 	uCollection := client.Database("Users").Collection("UserDatas")
+	sCollection := client.Database("Users").Collection("info")
 	mCollection := client.Database("messages").Collection("userMsg")
 	m.Client = client
 	m.Ctx = ctx
 	m.UserCollection = uCollection
+	m.ServerCollection = sCollection
 	m.MsgCollection = mCollection
+
+	m.AddServerDetails(sKey)
+
 	fmt.Println("Mongo client connected!")
+}
+
+func (m *Mongo) AddServerDetails(key string) {
+	_, err := m.Secretekey()
+	if err != nil {
+		var sData utils.ServerData
+		sData.ID = "serverid"
+		sData.SecreteKey = key
+
+		m.ServerCollection.InsertOne(m.Ctx, sData)
+	}
 }
 
 func (m *Mongo) AddUserMsgField() (string, error) {
@@ -79,7 +99,7 @@ func (m *Mongo) AddUser(user utils.UserData) (string, error) {
 	}
 	fmt.Println("Adduser")
 	id := result.InsertedID.(primitive.ObjectID)
-	return id.String(), nil
+	return id.Hex(), nil
 }
 
 func (m *Mongo) DeleteUser(filter primitive.M) error {
@@ -336,4 +356,45 @@ func (m *Mongo) UpdateLogoutStatus(mid string, status bool) bool {
 		return true
 	}
 	return false
+}
+
+func (m *Mongo) Secretekey() (string, error) {
+	cursor, err := m.ServerCollection.Find(
+		context.TODO(),
+		bson.M{"id": "serverid"},
+	)
+	if err != nil {
+		log.Println("[MONGOGETERROR] : ", err.Error())
+	}
+	var serverD []utils.ServerData
+	err = cursor.All(context.TODO(), &serverD)
+	if err != nil {
+		log.Println("[MONGOCURSORERROR] : ", err.Error())
+	}
+	if len(serverD) > 0 {
+		return serverD[0].SecreteKey, nil
+	} else {
+		return "", errors.New("no data found")
+	}
+
+}
+
+func (m *Mongo) CheckUserExistence(email string) bool {
+	cursor, err := m.UserCollection.Find(
+		context.TODO(),
+		bson.M{"email": email},
+	)
+	if err != nil {
+		log.Println("[MONGOGETERROR] : ", err.Error())
+	}
+	var userd []utils.UserData
+	err = cursor.All(context.TODO(), &userd)
+	if err != nil {
+		log.Println("[MONGOCURSORERROR] : ", err.Error())
+	}
+	if len(userd) > 0 {
+		return userd[0].PhoneNo != ""
+	}
+	return false
+
 }

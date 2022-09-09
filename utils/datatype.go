@@ -10,9 +10,9 @@ type UserData struct {
 	MainKey     string         `bson:"main_key,omitempty"`
 	Gender      string         `bson:"gender,omitempty"`
 	Password    string         `bson:"password,omitempty"`
+	Logout      bool           `bson.A:"logout,omitempty"`
 	Blocked     map[string]int `bson.M:"blocked,omitempty"`
 	Connections map[string]int `bson.A:"connections,omitempty"`
-	Logout      bool           `bson:"logout,omitempty"`
 }
 
 type NewUser struct {
@@ -115,4 +115,9 @@ type UpdateEmailPayload struct {
 
 type LogOutRequest struct {
 	Mid string `json:"mid"`
+}
+
+type ServerData struct {
+	ID         string `bson:"id"`
+	SecreteKey string `bson:"tokensecretekey"`
 }

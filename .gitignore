@@ -2,3 +2,6 @@
 /Dockerfile
 /go.mod
 /go.sum
+/dump
+/__debug_bin
+/.vscode
