@@ -2,7 +2,7 @@ syntax = "proto3";
 
 package main;
 
-option go_package="./gbp";
+option go_package="./protobuf";
 
 message Transport {
     bytes Msg = 1;

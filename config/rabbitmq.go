@@ -1,21 +1,22 @@
-package rmq
+package config
 
 import (
 	"fmt"
 	"math/rand"
 
-	"github.com/ShikharY10/goAPI/redisAction"
+	"github.com/ShikharY10/gbAPI/models"
 	"github.com/streadway/amqp"
 )
 
 type RMQ struct {
-	RedisDB *redisAction.Redis
+	RedisDB *models.Redis
 	Msgs    <-chan amqp.Delivery
 	ch      *amqp.Channel
 }
 
-func (r *RMQ) Init(rmqIP string, username string, password string) {
-	var address string = "amqp://" + username + ":" + password + "@" + rmqIP + ":5672/"
+func RabbitInit(RMQIP string, username string, password string) *RMQ {
+	var r RMQ
+	var address string = "amqp://" + username + ":" + password + "@" + RMQIP + ":5672/"
 	conn, err := amqp.Dial(address)
 	if err != nil {
 		fmt.Println("[ERROR] : ", err.Error())
@@ -26,6 +27,7 @@ func (r *RMQ) Init(rmqIP string, username string, password string) {
 	}
 	r.ch = ch
 	fmt.Println("RabbitMQ Connected")
+	return &r
 }
 
 func (r *RMQ) GetEngineChannel() string {

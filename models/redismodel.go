@@ -1,4 +1,4 @@
-package redisAction
+package models
 
 import (
 	"fmt"
@@ -6,30 +6,23 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/ShikharY10/goAPI/utils"
+	"github.com/ShikharY10/gbAPI/utils"
 	"github.com/go-redis/redis"
 )
 
 type Redis struct {
-	Client *redis.Client
+	client *redis.Client
 }
 
-func (r *Redis) Init(redisIP string) {
-	client := redis.NewClient(&redis.Options{
-		Addr:     redisIP + ":6379",
-		Password: "",
-		DB:       0,
-	})
-	s := client.Ping()
-	fmt.Println(s.String())
-
-	r.Client = client
-	fmt.Println("Redis client connected!")
+func CreateMainRedisModel(client *redis.Client) Redis {
+	var r Redis
+	r.client = client
+	return r
 }
 
 func (r *Redis) SetUserData(id int, data map[string]interface{}) {
 	key := strconv.Itoa(id) + "data"
-	status := r.Client.HMSet(key, data)
+	status := r.client.HMSet(key, data)
 	s, e := status.Result()
 	if e != nil {
 		panic(e)
@@ -39,7 +32,7 @@ func (r *Redis) SetUserData(id int, data map[string]interface{}) {
 
 func (r *Redis) GetUserIsOnline(id int) int {
 	key := strconv.Itoa(id) + "data"
-	value := r.Client.HMGet(key, "IsOnline")
+	value := r.client.HMGet(key, "IsOnline")
 	val, err := value.Result()
 	if err != nil {
 		panic(err)
@@ -55,7 +48,7 @@ func (r *Redis) GetUserIsOnline(id int) int {
 
 func (r *Redis) GetUserLastSeen(id int) string {
 	key := strconv.Itoa(id) + "data"
-	value := r.Client.HMGet(key, "LastSeen")
+	value := r.client.HMGet(key, "LastSeen")
 	val, err := value.Result()
 	if err != nil {
 		panic(err)
@@ -67,7 +60,7 @@ func (r *Redis) GetUserLastSeen(id int) string {
 
 func (r *Redis) GetUserServerName(id int) int {
 	key := strconv.Itoa(id) + "data"
-	value := r.Client.HMGet(key, "servername")
+	value := r.client.HMGet(key, "servername")
 	val, err := value.Result()
 	if err != nil {
 		panic(err)
@@ -81,30 +74,9 @@ func (r *Redis) GetUserServerName(id int) int {
 	return i
 }
 
-// func (r *Redis) GetClientData(id int) utils.UserData {
-// 	key := strconv.Itoa(id) + "data"
-// 	value := r.Client.HMGet(key, "IsOnline", "LastSeen", "servername")
-// 	in := value.Val()
-// 	var ud utils.UserData
-// 	ud.LastSeen = in[1].(string)
-// 	i, e := strconv.Atoi(in[0].(string))
-// 	if e != nil {
-// 		panic(e)
-// 	}
-// 	ud.IsOnline = i
-
-// 	ir, er := strconv.Atoi(in[0].(string))
-// 	if er != nil {
-// 		panic(er)
-// 	}
-// 	ud.IsOnline = ir
-
-// 	return ud
-// }
-
 func (r *Redis) GetUserMsg(id int) (string, error) {
 	key := strconv.Itoa(id)
-	s := r.Client.LPop(key)
+	s := r.client.LPop(key)
 	str, err := s.Result()
 	if err != nil {
 		panic(err)
@@ -114,7 +86,7 @@ func (r *Redis) GetUserMsg(id int) (string, error) {
 
 func (r *Redis) SetUserMsg(id int, msg string) error {
 	key := strconv.Itoa(id)
-	s := r.Client.RPush(key, msg)
+	s := r.client.RPush(key, msg)
 	_, e := s.Result()
 	if e != nil {
 		return e
@@ -126,12 +98,12 @@ func (r *Redis) RegisterOTP() (string, string) {
 	id64 := utils.GenerateRandomId()
 	otp := utils.GenerateOTP(6)
 	print("id64: ", id64)
-	r.Client.Set(id64, otp, time.Duration(5*time.Minute))
+	r.client.Set(id64, otp, time.Duration(5*time.Minute))
 	return id64, otp
 }
 
 func (r *Redis) VarifyOTP(id string, otp string) bool {
-	res := r.Client.Get(id)
+	res := r.client.Get(id)
 	_otp := res.Val()
 	if otp == _otp {
 		return true
@@ -141,7 +113,7 @@ func (r *Redis) VarifyOTP(id string, otp string) bool {
 }
 
 func (r *Redis) GetSecretekey() (string, error) {
-	res := r.Client.Get("secretekey")
+	res := r.client.Get("secretekey")
 	if res.Err() != nil {
 		return "", res.Err()
 	}
@@ -150,13 +122,13 @@ func (r *Redis) GetSecretekey() (string, error) {
 }
 
 func (r *Redis) SetSecretekey(key string) bool {
-	res := r.Client.Set("secretekey", key, 0)
+	res := r.client.Set("secretekey", key, 0)
 	return res.Err() == nil
 }
 
 func (r *Redis) GetEngineName() []string {
 	fmt.Println("readig engines names")
-	ress := r.Client.LRange("engines", 0, -1)
+	ress := r.client.LRange("engines", 0, -1)
 	fmt.Println("read completed: ", ress)
 	engines, err := ress.Result()
 	if err != nil {

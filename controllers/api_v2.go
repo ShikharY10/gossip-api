@@ -1,27 +1,28 @@
-package api
+package controllers
 
 import (
 	"encoding/json"
 	"fmt"
 	"log"
 	"net/http"
+	"os"
 	"strings"
 
-	"github.com/ShikharY10/goAPI/gbp"
-	"github.com/ShikharY10/goAPI/middleware"
-	"github.com/ShikharY10/goAPI/mongoAction"
-	"github.com/ShikharY10/goAPI/redisAction"
-	"github.com/ShikharY10/goAPI/rmq"
-	"github.com/ShikharY10/goAPI/utils"
+	"github.com/ShikharY10/gbAPI/config"
+	"github.com/ShikharY10/gbAPI/middleware"
+	"github.com/ShikharY10/gbAPI/models"
+	gbp "github.com/ShikharY10/gbAPI/protobuf"
+	"github.com/ShikharY10/gbAPI/utils"
 	"github.com/gorilla/mux"
 	"google.golang.org/protobuf/proto"
 )
 
 type API_V2 struct {
-	Mongo   *mongoAction.Mongo
-	Redis   *redisAction.Redis
-	RMQ     *rmq.RMQ
-	AuthJwt *middleware.JWT
+	MsgModel   *models.MsgModel
+	UserModel  *models.UserModel
+	RedisModel *models.Redis
+	RMQ        *config.RMQ
+	AuthJwt    *middleware.JWT
 }
 
 func (a *API_V2) Apiv2(w http.ResponseWriter, r *http.Request) {
@@ -34,7 +35,7 @@ func (a *API_V2) SendOTP(w http.ResponseWriter, r *http.Request) {
 	params := mux.Vars(r)
 	number := params["number"]
 
-	id, otp := a.Redis.RegisterOTP()
+	id, otp := a.RedisModel.RegisterOTP()
 	var otpData map[string]string = map[string]string{
 		"otp":    otp,
 		"number": number,
@@ -64,7 +65,7 @@ func (a *API_V2) VarifyOTP(w http.ResponseWriter, r *http.Request) {
 	} else {
 		var __otp utils.VOTP
 		_ = json.NewDecoder(r.Body).Decode(&__otp)
-		res := a.Redis.VarifyOTP(__otp.Id, __otp.Otp)
+		res := a.RedisModel.VarifyOTP(__otp.Id, __otp.Otp)
 
 		if res {
 			response.Status = true
@@ -96,7 +97,7 @@ func (a *API_V2) CreateNewUser(w http.ResponseWriter, r *http.Request) {
 		response.Status = false
 		response.Disc = "bad json data"
 	}
-	id, _ := a.Mongo.AddUserMsgField()
+	id, _ := a.MsgModel.AddUserMsgField()
 	newUserdata.MsgId = id
 
 	aes_key := utils.GenerateAesKey(32)
@@ -128,36 +129,36 @@ func (a *API_V2) CreateNewUser(w http.ResponseWriter, r *http.Request) {
 
 			fmt.Println("uD: ", uD)
 
-			uid, err := a.Mongo.AddUser(uD)
+			uid, err := a.UserModel.AddUser(uD)
 			if err != nil {
 				response.Status = false
 				response.Disc = "unable to add user data to the database"
 			} else {
-				var secreteKey string = ""
-				secreteKey, err := a.Redis.GetSecretekey()
-				if err != nil {
-					secreteKey, _ = a.Mongo.Secretekey()
-					a.Redis.SetSecretekey(secreteKey)
-				}
-				token, err := a.AuthJwt.GenerateJWT(newUserdata.Email, []byte(secreteKey))
-				if err != nil {
-					fmt.Println("error in newuser: ", err.Error())
-				}
-				var responseMap map[string]string = map[string]string{
-					"uid":     uid,
-					"mid":     newUserdata.MsgId,
-					"Eaeskey": utils.Encode(cipherText),
-					"token":   token,
-				}
-
-				res, err := json.Marshal(responseMap)
-				if err != nil {
+				secretKey, found := os.LookupEnv("jwt-key")
+				if !found {
 					response.Status = false
-					response.Disc = "error while preparing response"
+					response.Disc = "unable to add user data to the database"
 				} else {
-					response.Status = true
-					response.Disc = "success"
-					response.Data = utils.Encode(res) // utils.Encode(res)
+					token, err := a.AuthJwt.GenerateJWT(newUserdata.Email, []byte(secretKey))
+					if err != nil {
+						fmt.Println("error in newuser: ", err.Error())
+					}
+					var responseMap map[string]string = map[string]string{
+						"uid":     uid,
+						"mid":     newUserdata.MsgId,
+						"Eaeskey": utils.Encode(cipherText),
+						"token":   token,
+					}
+
+					res, err := json.Marshal(responseMap)
+					if err != nil {
+						response.Status = false
+						response.Disc = "error while preparing response"
+					} else {
+						response.Status = true
+						response.Disc = "success"
+						response.Data = utils.Encode(res) // utils.Encode(res)
+					}
 				}
 			}
 		}
@@ -198,7 +199,7 @@ func (a *API_V2) Login(w http.ResponseWriter, r *http.Request) {
 				digest := []byte(seperated[2])
 
 				if utils.VarifySignature(publicKey, digest, signature) {
-					myData, err := a.Mongo.ReadUserDataByMNo(loginData.Number)
+					myData, err := a.UserModel.GetUserDataByNumber(loginData.Number)
 					if err != nil {
 						response.Disc = "user not found"
 					} else {
@@ -230,7 +231,7 @@ func (a *API_V2) Login(w http.ResponseWriter, r *http.Request) {
 								var connDatalist []*gbp.ConnectionData = []*gbp.ConnectionData{}
 								for mid := range myData.Connections {
 
-									connData, err := a.Mongo.GetUserDataByMID(mid)
+									connData, err := a.UserModel.GetUserDataByMID(mid)
 									if err != nil {
 										continue
 									}
@@ -248,51 +249,49 @@ func (a *API_V2) Login(w http.ResponseWriter, r *http.Request) {
 									connDatalist = append(connDatalist, &connDataPayload)
 								}
 
-								var secreteKey string = ""
-								secreteKey, err = a.Redis.GetSecretekey()
-								if err != nil {
-									secreteKey, _ = a.Mongo.Secretekey()
-									a.Redis.SetSecretekey(secreteKey)
-								}
-								token, err := a.AuthJwt.GenerateJWT(myData.Email, []byte(secreteKey))
-								if err != nil {
-									fmt.Println("error in newuser: ", err.Error())
-								}
+								secretkey, found := os.LookupEnv("jwt-key")
+								if !found {
 
-								loginResponsePayload.ConnData = connDatalist
-								loginEnginePayload.AllConn = allConn
-								loginResponsePayload.Token = token
-
-								enginePayloadBytes, err := proto.Marshal(&loginEnginePayload)
-								if err != nil {
-									response.Disc = "internal server error"
 								} else {
-									var trans gbp.Transport
-									trans.Id = ""
-									trans.Msg = enginePayloadBytes
-									trans.Tp = 10
-									transBytes, err := proto.Marshal(&trans)
+									token, err := a.AuthJwt.GenerateJWT(myData.Email, []byte(secretkey))
+									if err != nil {
+										fmt.Println("error in newuser: ", err.Error())
+									}
 
+									loginResponsePayload.ConnData = connDatalist
+									loginEnginePayload.AllConn = allConn
+									loginResponsePayload.Token = token
+
+									enginePayloadBytes, err := proto.Marshal(&loginEnginePayload)
 									if err != nil {
 										response.Disc = "internal server error"
 									} else {
-										engineName := a.RMQ.GetEngineChannel()
-										a.RMQ.Produce(engineName, transBytes)
-
-										userPayloadBytes, err := proto.Marshal(&loginResponsePayload)
+										var trans gbp.Transport
+										trans.Id = ""
+										trans.Msg = enginePayloadBytes
+										trans.Tp = 10
+										transBytes, err := proto.Marshal(&trans)
 
 										if err != nil {
 											response.Disc = "internal server error"
 										} else {
-											response.Status = true
-											response.Disc = "ok"
-											response.Data = utils.Encode(userPayloadBytes)
-											a.Mongo.UpdateLogoutStatus(myData.MsgId, false)
+											engineName := a.RMQ.GetEngineChannel()
+											a.RMQ.Produce(engineName, transBytes)
+
+											userPayloadBytes, err := proto.Marshal(&loginResponsePayload)
+
+											if err != nil {
+												response.Disc = "internal server error"
+											} else {
+												response.Status = true
+												response.Disc = "ok"
+												response.Data = utils.Encode(userPayloadBytes)
+												a.UserModel.UpdateLogoutStatus(myData.MsgId, false)
+											}
 										}
 									}
 								}
 							}
-
 						}
 					}
 				}
@@ -326,7 +325,7 @@ func (a *API_V2) Logout(w http.ResponseWriter, r *http.Request) {
 		} else if len(logoutReq.Mid) == 0 {
 			response.Disc = "empty json data"
 		} else {
-			res := a.Mongo.UpdateLogoutStatus(logoutReq.Mid, true)
+			res := a.UserModel.UpdateLogoutStatus(logoutReq.Mid, true)
 			if res {
 				response.Status = true
 				response.Disc = "logout status changed to true"
@@ -366,7 +365,7 @@ func (a *API_V2) ToggleBlock(w http.ResponseWriter, r *http.Request) {
 		} else if len(blockRequest.SenderMID) == 0 || len(blockRequest.TargetNUM) == 0 {
 			response.Disc = "bad json data: some fields are not found"
 		} else {
-			userData, err := a.Mongo.GetUserDataByMID(blockRequest.SenderMID)
+			userData, err := a.UserModel.GetUserDataByMID(blockRequest.SenderMID)
 			if err != nil {
 				response.Disc = "sender not found"
 			} else {
@@ -374,7 +373,7 @@ func (a *API_V2) ToggleBlock(w http.ResponseWriter, r *http.Request) {
 
 				if blockRequest.Type == -1 {
 					if tp == 1 {
-						res := a.Mongo.DeleteFromBlocking(blockRequest.SenderMID, blockRequest.TargetNUM)
+						res := a.UserModel.DeleteFromBlocking(blockRequest.SenderMID, blockRequest.TargetNUM)
 						if res == 0 {
 							response.Disc = "somthing went wrong"
 						} else {
@@ -384,7 +383,7 @@ func (a *API_V2) ToggleBlock(w http.ResponseWriter, r *http.Request) {
 					}
 				} else if blockRequest.Type == 1 {
 					if tp != 1 {
-						res := a.Mongo.AddTOBlocking(blockRequest.SenderMID, blockRequest.TargetNUM)
+						res := a.UserModel.AddTOBlocking(blockRequest.SenderMID, blockRequest.TargetNUM)
 						if res == 0 {
 							response.Disc = "something went wrong"
 						} else {
@@ -422,11 +421,11 @@ func (a *API_V2) CheckAwailibity(w http.ResponseWriter, r *http.Request) {
 		} else if len(checkAccReq.SenderMID) < 1 {
 			response.Disc = "empty json data"
 		} else {
-			found := a.Mongo.CheckAccountPresence(checkAccReq.TargetNUM)
+			found := a.UserModel.CheckAccountPresence(checkAccReq.TargetNUM)
 			if !found {
 				response.Disc = "user not found"
 			} else {
-				bFound := a.Mongo.CheckBlocking(checkAccReq.SenderMID, checkAccReq.TargetNUM)
+				bFound := a.UserModel.CheckBlocking(checkAccReq.SenderMID, checkAccReq.TargetNUM)
 				if bFound {
 					response.Disc = "sender is blocked"
 				} else {
@@ -462,10 +461,10 @@ func (a *API_V2) RemoveFromHandshake(w http.ResponseWriter, r *http.Request) {
 		} else if len(hsRemove.TargetNUM) < 1 {
 			response.Disc = "empty json data"
 		} else {
-			targetMId := a.Mongo.GetMsgIdByNum(hsRemove.TargetNUM)
-			senderNUM := a.Mongo.GetNUMIdByMsgId(hsRemove.UserMID)
-			res1 := a.Mongo.RemoveFromConnection(hsRemove.UserMID, targetMId)
-			res2 := a.Mongo.RemoveFromConnection(targetMId, hsRemove.UserMID)
+			targetMId := a.UserModel.GetMsgIdByNumber(hsRemove.TargetNUM)
+			senderNUM := a.UserModel.GetNumberByMsgId(hsRemove.UserMID)
+			res1 := a.UserModel.RemoveFromConnection(hsRemove.UserMID, targetMId)
+			res2 := a.UserModel.RemoveFromConnection(targetMId, hsRemove.UserMID)
 
 			if res1 && res2 {
 				var notify gbp.HandshakeDeleteNotify
@@ -522,7 +521,7 @@ func (a *API_V2) UpdateProfilePicture(w http.ResponseWriter, r *http.Request) {
 		} else if len(changePic.PicData) < 1 {
 			response.Disc = "empty json data"
 		} else {
-			userData, err := a.Mongo.ReadUserDataByMID(changePic.SenderMID)
+			userData, err := a.UserModel.GetUserDataByMID(changePic.SenderMID)
 			if err != nil {
 				response.Disc = "no user found"
 			} else {
@@ -550,7 +549,7 @@ func (a *API_V2) UpdateProfilePicture(w http.ResponseWriter, r *http.Request) {
 						} else {
 							engineName := a.RMQ.GetEngineChannel()
 							a.RMQ.Produce(engineName, transBytes)
-							res := a.Mongo.UpdateUserProfilePic(changePic.SenderMID, changePic.PicData)
+							res := a.UserModel.UpdateUserProfilePic(changePic.SenderMID, changePic.PicData)
 							if res {
 								response.Status = true
 								response.Disc = "success"
@@ -560,7 +559,7 @@ func (a *API_V2) UpdateProfilePicture(w http.ResponseWriter, r *http.Request) {
 						}
 					}
 				} else {
-					res := a.Mongo.UpdateUserProfilePic(changePic.SenderMID, changePic.PicData)
+					res := a.UserModel.UpdateUserProfilePic(changePic.SenderMID, changePic.PicData)
 					if res {
 						response.Status = true
 						response.Disc = "success"
@@ -597,11 +596,11 @@ func (a *API_V2) UpdateNumber(w http.ResponseWriter, r *http.Request) {
 		} else if len(__otp.Otp) < 1 {
 			response.Disc = "empty json data"
 		} else {
-			res := a.Redis.VarifyOTP(__otp.OtpId, __otp.Otp)
+			res := a.RedisModel.VarifyOTP(__otp.OtpId, __otp.Otp)
 
 			if res {
 				if __otp.Notify == 1 {
-					userData, err := a.Mongo.ReadUserDataByMID(__otp.MID)
+					userData, err := a.UserModel.GetUserDataByMID(__otp.MID)
 					if err != nil {
 						response.Disc = "no user found"
 					} else {
@@ -634,7 +633,7 @@ func (a *API_V2) UpdateNumber(w http.ResponseWriter, r *http.Request) {
 						}
 					}
 				} else if __otp.Notify == 0 {
-					res := a.Mongo.UpdateUserNumber(__otp.MID, __otp.Number)
+					res := a.UserModel.UpdateUserNumber(__otp.MID, __otp.Number)
 					if res {
 						response.Status = true
 						response.Disc = "success"
@@ -673,7 +672,7 @@ func (a *API_V2) UpdateEmail(w http.ResponseWriter, r *http.Request) {
 		} else if len(changeEmail.Email) < 1 {
 			response.Disc = "empty json data"
 		} else {
-			res := a.Mongo.UpdateUserEmail(changeEmail.MID, changeEmail.Email)
+			res := a.UserModel.UpdateUserEmail(changeEmail.MID, changeEmail.Email)
 			if res {
 				response.Status = true
 				response.Disc = "success"

@@ -5,18 +5,19 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"os"
 	"strings"
 	"time"
 
-	"github.com/ShikharY10/goAPI/mongoAction"
-	"github.com/ShikharY10/goAPI/redisAction"
+	"github.com/ShikharY10/gbAPI/models"
 	"github.com/golang-jwt/jwt"
 )
 
 type JWT struct {
-	I     int
-	Mongo *mongoAction.Mongo
-	Redis *redisAction.Redis
+	I         int
+	MsgModel  *models.MsgModel
+	userModel *models.UserModel
+	Redis     *models.Redis
 }
 
 type VarifiedClaim struct {
@@ -80,8 +81,14 @@ func (j *JWT) APIV2Auth(next http.Handler) http.Handler {
 
 			secreteKey, err := j.Redis.GetSecretekey()
 			if err != nil {
-				secreteKey, _ = j.Mongo.Secretekey()
-				j.Redis.SetSecretekey(secreteKey)
+				// secreteKey, _ = j.Mongo.Secretekey()
+				secreteKey, found := os.LookupEnv("SECRETE_KEY")
+				if found {
+					j.Redis.SetSecretekey(secreteKey)
+				} else {
+					return
+				}
+
 			}
 			claim, err := j.VarifyJWT(token, []byte(secreteKey))
 			if err != nil {
@@ -90,7 +97,7 @@ func (j *JWT) APIV2Auth(next http.Handler) http.Handler {
 				json.NewEncoder(w).Encode("bad token")
 				return
 			}
-			if j.Mongo.CheckUserExistence(claim.email) {
+			if j.userModel.CheckUserExistence(claim.email) {
 				fmt.Println("Authenticated | Bypassing...")
 				next.ServeHTTP(w, r)
 			} else {

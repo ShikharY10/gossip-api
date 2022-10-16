@@ -1,4 +1,4 @@
-package api
+package controllers
 
 import (
 	"encoding/json"
@@ -6,18 +6,18 @@ import (
 	"log"
 	"net/http"
 
-	"github.com/ShikharY10/goAPI/gbp"
-	"github.com/ShikharY10/goAPI/mongoAction"
-	"github.com/ShikharY10/goAPI/redisAction"
-	"github.com/ShikharY10/goAPI/rmq"
-	"github.com/ShikharY10/goAPI/utils"
+	"github.com/ShikharY10/gbAPI/config"
+	"github.com/ShikharY10/gbAPI/models"
+	gbp "github.com/ShikharY10/gbAPI/protobuf"
+	"github.com/ShikharY10/gbAPI/utils"
 	"google.golang.org/protobuf/proto"
 )
 
 type API_V1 struct {
-	Mongo *mongoAction.Mongo
-	Redis *redisAction.Redis
-	RMQ   *rmq.RMQ
+	MsgModel   *models.MsgModel
+	UserModel  *models.UserModel
+	RedisModel *models.Redis
+	RMQ        *config.RMQ
 }
 
 func (a *API_V1) Apiv1(w http.ResponseWriter, r *http.Request) {
@@ -36,7 +36,7 @@ func (a *API_V1) VerifyNumber(w http.ResponseWriter, r *http.Request) {
 	var mn utils.MobileNo
 	_ = json.NewDecoder(r.Body).Decode(&mn)
 	fmt.Println("mn: ", mn)
-	id, otp := a.Redis.RegisterOTP()
+	id, otp := a.RedisModel.RegisterOTP()
 	var otpData map[string]string = map[string]string{
 		"otp":    otp,
 		"number": mn.Number,
@@ -59,7 +59,7 @@ func (a *API_V1) VarifyNumberOTP(w http.ResponseWriter, r *http.Request) {
 	}
 	var __otp utils.VOTP
 	_ = json.NewDecoder(r.Body).Decode(&__otp)
-	res := a.Redis.VarifyOTP(__otp.Id, __otp.Otp)
+	res := a.RedisModel.VarifyOTP(__otp.Id, __otp.Otp)
 	if res {
 		var s utils.SuccessStruct
 		s.Status = "successful"
@@ -82,7 +82,7 @@ func (a *API_V1) NewUser(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		log.Println(err.Error())
 	}
-	id, _ := a.Mongo.AddUserMsgField()
+	id, _ := a.MsgModel.AddUserMsgField()
 	newUserdata.MsgId = id
 
 	aes_key := utils.GenerateAesKey(32)
@@ -113,7 +113,7 @@ func (a *API_V1) NewUser(w http.ResponseWriter, r *http.Request) {
 	uD.Logout = false
 
 	// fmt.Println("uD: ", uD)
-	uid, err := a.Mongo.AddUser(uD)
+	uid, err := a.UserModel.AddUser(uD)
 	if err != nil {
 		log.Println("[MONGOADDUSERERROR] : ", err.Error())
 	}
@@ -133,7 +133,7 @@ func (a *API_V1) NewUser(w http.ResponseWriter, r *http.Request) {
 	s.Status = "successful"
 	s.Disc = utils.Encode(res)
 	json.NewEncoder(w).Encode(s)
-	a.Redis.Client.Del(newUserdata.MsgId)
+	// a.RedisModel.Client.Del(newUserdata.MsgId)
 	// fmt.Println("Len: ", len(s.Disc), " | Ciphertext: ", s.Disc)
 }
 
@@ -149,7 +149,7 @@ func (a *API_V1) LoginUser(w http.ResponseWriter, r *http.Request) {
 	var loginData utils.LoginRequest
 	_ = json.NewDecoder(r.Body).Decode(&loginData)
 
-	myData, err := a.Mongo.ReadUserDataByMNo(loginData.Number)
+	myData, err := a.UserModel.GetUserDataByNumber(loginData.Number)
 	if err != nil {
 		var s utils.SuccessStruct
 		s.Status = "unsuccessful"
@@ -181,7 +181,7 @@ func (a *API_V1) LoginUser(w http.ResponseWriter, r *http.Request) {
 		var connDatalist []*gbp.ConnectionData = []*gbp.ConnectionData{}
 		for mid := range myData.Connections {
 
-			connData, err := a.Mongo.GetUserDataByMID(mid)
+			connData, err := a.UserModel.GetUserDataByMID(mid)
 			if err != nil {
 				continue
 			}
@@ -244,7 +244,7 @@ func (a *API_V1) LoginUser(w http.ResponseWriter, r *http.Request) {
 			log.Println("[marshal error]", err.Error())
 		}
 		w.Write(responseBytes)
-		a.Mongo.UpdateLogoutStatus(myData.MsgId, false)
+		a.UserModel.UpdateLogoutStatus(myData.MsgId, false)
 		return
 	}
 }
@@ -260,19 +260,19 @@ func (a *API_V1) DeleteUser(w http.ResponseWriter, r *http.Request) {
 	}
 	var opid utils.DeletePayload
 	_ = json.NewDecoder(r.Body).Decode(&opid)
-	o := a.Redis.Client.Get(opid.OpId)
-	if o.Err() != nil {
-		var s utils.SuccessStruct
-		s.Status = "unsuccessful"
-		s.Disc = "Session Timeout"
-		json.NewEncoder(w).Encode(s)
-		return
-	}
+	// o := a.RedisModel.client.Get(opid.OpId)
+	// if o.Err() != nil {
+	// 	var s utils.SuccessStruct
+	// 	s.Status = "unsuccessful"
+	// 	s.Disc = "Session Timeout"
+	// 	json.NewEncoder(w).Encode(s)
+	// 	return
+	// }
 	var err error = nil
 	if opid.TargetType == "email" {
-		err = a.Mongo.DeleteUserByEmail(opid.Target)
+		// err = a.UserModel.DeleteUserByEmail(opid.Target)
 	} else if opid.TargetType == "phoneno" {
-		err = a.Mongo.DeleteUserByPhoneNo(opid.Target)
+		// err = a.Mongo.DeleteUserByPhoneNo(opid.Target)
 	}
 	var s utils.SuccessStruct
 	if err != nil {
@@ -280,7 +280,7 @@ func (a *API_V1) DeleteUser(w http.ResponseWriter, r *http.Request) {
 	}
 	s.Status = "Successfull"
 	json.NewEncoder(w).Encode(s)
-	a.Redis.Client.Del(opid.OpId)
+	// a.RedisModel.Client.Del(opid.OpId)
 }
 
 func (a *API_V1) ToggleBlock(w http.ResponseWriter, r *http.Request) {
@@ -298,7 +298,7 @@ func (a *API_V1) ToggleBlock(w http.ResponseWriter, r *http.Request) {
 		log.Println(err.Error())
 	}
 
-	userData, err := a.Mongo.GetUserDataByMID(blockRequest.SenderMID)
+	userData, err := a.UserModel.GetUserDataByMID(blockRequest.SenderMID)
 	if err != nil {
 		var s utils.SuccessStruct
 		s.Disc = "invalid senderMID / user not found"
@@ -310,7 +310,7 @@ func (a *API_V1) ToggleBlock(w http.ResponseWriter, r *http.Request) {
 
 	if blockRequest.Type == -1 {
 		if tp == 1 {
-			res := a.Mongo.DeleteFromBlocking(blockRequest.SenderMID, blockRequest.TargetNUM)
+			res := a.UserModel.DeleteFromBlocking(blockRequest.SenderMID, blockRequest.TargetNUM)
 			var s utils.SuccessStruct
 			if res == 1 {
 				s.Disc = "Deleted"
@@ -326,7 +326,7 @@ func (a *API_V1) ToggleBlock(w http.ResponseWriter, r *http.Request) {
 		}
 	} else if blockRequest.Type == 1 {
 		if tp != 1 {
-			res := a.Mongo.AddTOBlocking(blockRequest.SenderMID, blockRequest.TargetNUM)
+			res := a.UserModel.AddTOBlocking(blockRequest.SenderMID, blockRequest.TargetNUM)
 			var s utils.SuccessStruct
 			if res == 1 {
 				s.Disc = "Added"
@@ -357,7 +357,7 @@ func (a *API_V1) CheckAwailibity(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		log.Println(err.Error())
 	}
-	found := a.Mongo.CheckAccountPresence(checkAccReq.TargetNUM)
+	found := a.UserModel.CheckAccountPresence(checkAccReq.TargetNUM)
 	if !found {
 		var s utils.SuccessStruct
 		s.Disc = "no account found related to this number"
@@ -365,7 +365,7 @@ func (a *API_V1) CheckAwailibity(w http.ResponseWriter, r *http.Request) {
 		json.NewEncoder(w).Encode(s)
 		return
 	} else {
-		bFound := a.Mongo.CheckBlocking(checkAccReq.SenderMID, checkAccReq.TargetNUM)
+		bFound := a.UserModel.CheckBlocking(checkAccReq.SenderMID, checkAccReq.TargetNUM)
 		if bFound {
 			var s utils.SuccessStruct
 			s.Disc = "you are blocked!"
@@ -400,10 +400,10 @@ func (a *API_V1) RemoveHandshake(w http.ResponseWriter, r *http.Request) {
 		json.NewEncoder(w).Encode(s)
 		return
 	}
-	targetMId := a.Mongo.GetMsgIdByNum(hsRemove.TargetNUM)
-	senderNUM := a.Mongo.GetNUMIdByMsgId(hsRemove.UserMID)
-	res1 := a.Mongo.RemoveFromConnection(hsRemove.UserMID, targetMId)
-	res2 := a.Mongo.RemoveFromConnection(targetMId, hsRemove.UserMID)
+	targetMId := a.UserModel.GetMsgIdByNumber(hsRemove.TargetNUM)
+	senderNUM := a.UserModel.GetNumberByMsgId(hsRemove.UserMID)
+	res1 := a.UserModel.RemoveFromConnection(hsRemove.UserMID, targetMId)
+	res2 := a.UserModel.RemoveFromConnection(targetMId, hsRemove.UserMID)
 	if res1 && res2 {
 		var notify gbp.HandshakeDeleteNotify
 		notify.Number = senderNUM
@@ -462,7 +462,7 @@ func (a *API_V1) UpdateProfilePicture(w http.ResponseWriter, r *http.Request) {
 		log.Println(err.Error())
 	}
 
-	userData, err := a.Mongo.ReadUserDataByMID(changePic.SenderMID)
+	userData, err := a.UserModel.GetUserDataByMID(changePic.SenderMID)
 	if err != nil {
 		var s utils.SuccessStruct
 		s.Disc = "no data found, bad sendermid"
@@ -504,7 +504,7 @@ func (a *API_V1) UpdateProfilePicture(w http.ResponseWriter, r *http.Request) {
 		}
 		engineName := a.RMQ.GetEngineChannel()
 		a.RMQ.Produce(engineName, transBytes)
-		res := a.Mongo.UpdateUserProfilePic(changePic.SenderMID, changePic.PicData)
+		res := a.UserModel.UpdateUserProfilePic(changePic.SenderMID, changePic.PicData)
 		if res {
 			var s utils.SuccessStruct
 			s.Disc = ""
@@ -514,7 +514,7 @@ func (a *API_V1) UpdateProfilePicture(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	} else {
-		res := a.Mongo.UpdateUserProfilePic(changePic.SenderMID, changePic.PicData)
+		res := a.UserModel.UpdateUserProfilePic(changePic.SenderMID, changePic.PicData)
 		if res {
 			var s utils.SuccessStruct
 			s.Disc = ""
@@ -537,11 +537,11 @@ func (a *API_V1) UpdateNumber(w http.ResponseWriter, r *http.Request) {
 	}
 	var __otp utils.UpdateNumber
 	_ = json.NewDecoder(r.Body).Decode(&__otp)
-	res := a.Redis.VarifyOTP(__otp.OtpId, __otp.Otp)
+	res := a.RedisModel.VarifyOTP(__otp.OtpId, __otp.Otp)
 	if res {
 
 		if __otp.Notify == 1 {
-			userData, err := a.Mongo.ReadUserDataByMID(__otp.MID)
+			userData, err := a.UserModel.GetUserDataByMID(__otp.MID)
 			if err != nil {
 				var s utils.SuccessStruct
 				s.Disc = "no data found, bad sendermid"
@@ -581,7 +581,7 @@ func (a *API_V1) UpdateNumber(w http.ResponseWriter, r *http.Request) {
 			err = a.RMQ.Produce(engineName, transBytes)
 
 			if err != nil {
-				res := a.Mongo.UpdateUserNumber(__otp.MID, __otp.Number)
+				res := a.UserModel.UpdateUserNumber(__otp.MID, __otp.Number)
 				if res {
 					var s utils.SuccessStruct
 					s.Disc = ""
@@ -599,7 +599,7 @@ func (a *API_V1) UpdateNumber(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 		} else if __otp.Notify == 0 {
-			res := a.Mongo.UpdateUserNumber(__otp.MID, __otp.Number)
+			res := a.UserModel.UpdateUserNumber(__otp.MID, __otp.Number)
 			if res {
 				var s utils.SuccessStruct
 				s.Disc = ""
@@ -627,7 +627,7 @@ func (a *API_V1) UpdateEmail(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		log.Println(err.Error())
 	}
-	res := a.Mongo.UpdateUserEmail(changeEmail.MID, changeEmail.Email)
+	res := a.UserModel.UpdateUserEmail(changeEmail.MID, changeEmail.Email)
 	if res {
 		var s utils.SuccessStruct
 		s.Disc = ""
@@ -654,7 +654,7 @@ func (a *API_V1) LogOut(w http.ResponseWriter, r *http.Request) {
 		log.Println(err.Error())
 	}
 
-	res := a.Mongo.UpdateLogoutStatus(logoutReq.Mid, true)
+	res := a.UserModel.UpdateLogoutStatus(logoutReq.Mid, true)
 	if res {
 		var response gbp.Response
 		response.Status = true
