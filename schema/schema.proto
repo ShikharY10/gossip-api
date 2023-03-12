@@ -2,7 +2,12 @@ syntax = "proto3";
 
 package main;
 
-option go_package="./protobuf";
+option go_package= "./schema";
+
+message Payload {
+    bytes Data = 1;
+    string Type = 2;
+}
 
 message Transport {
     bytes Msg = 1;
@@ -67,4 +72,4 @@ message Response {
 }
 
 // export PATH=$PATH:~/go/bin
-// protoc -I. --go_out=. ./gbProto.proto
+// protoc -I. --go_out=. ./schema/schema.proto

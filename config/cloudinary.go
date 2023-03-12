@@ -6,6 +6,7 @@ import (
 	"os"
 	"time"
 
+	"github.com/ShikharY10/gbAPI/models"
 	"github.com/ShikharY10/gbAPI/utils"
 	"github.com/cloudinary/cloudinary-go"
 	"github.com/cloudinary/cloudinary-go/api/uploader"
@@ -69,9 +70,43 @@ func InitCloudinary() Cloudinary {
 	return cloud
 }
 
+func (cloud *Cloudinary) UploadUserAvatar(tempName string, imageData string, extension string) (*models.Avatar, error) {
+	var image []byte = utils.Decode(imageData)
+	f, err := os.Create("temp/" + tempName + "." + extension)
+	if err != nil {
+		return nil, err
+	}
+	defer f.Close()
+	_, err = f.Write(image)
+	if err != nil {
+		return nil, err
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	defer cancel()
+	uploadParam, err := cloud.cloudinary.Upload.Upload(
+		ctx,
+		"temp/"+tempName+"."+extension,
+		uploader.UploadParams{Folder: cloud.ProfilePictureFolder},
+	)
+	if err != nil {
+		return nil, err
+	}
+	os.Remove("temp/" + tempName + "." + extension)
+
+	var avatar models.Avatar
+	avatar.FileName = ""
+	// avatar.Height = strconv.Itoa(uploadParam.Height)
+	avatar.PublicId = uploadParam.PublicID
+	avatar.SecureUrl = uploadParam.SecureURL
+	// avatar.Width = strconv.Itoa(uploadParam.Width)
+	return &avatar, nil
+}
+
 func (cloud *Cloudinary) UploadChatImage(imageData string, extension string) (secureUrl string, publicID string, err error) {
 	var image []byte = utils.Decode(imageData)
-	f, err := os.Create("temp." + extension)
+	name := string(utils.GenerateAesKey(10))
+	f, err := os.Create("temp_" + name + extension)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -85,7 +120,7 @@ func (cloud *Cloudinary) UploadChatImage(imageData string, extension string) (se
 	defer cancel()
 	uploadParam, err := cloud.cloudinary.Upload.Upload(
 		ctx,
-		"temp."+extension,
+		"temp_"+name+extension,
 		uploader.UploadParams{Folder: cloud.ChatImageFolder},
 	)
 	if err != nil {

@@ -2,78 +2,82 @@ package config
 
 import (
 	"context"
-	"fmt"
-	"log"
+	"time"
 
-	"github.com/ShikharY10/gbAPI/models"
 	"github.com/go-redis/redis"
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
 )
 
-type MAIN struct {
-	MsgModel   *models.MsgModel
-	UserModel  *models.UserModel
-	RedisModel *models.Redis
-	RMQ        *RMQ
+type MongoDB struct {
+	PostImage   *mongo.Collection
+	AvatarImage *mongo.Collection
+	Users       *mongo.Collection
+	Posts       *mongo.Collection
+	Frequnecy   *mongo.Collection
+	Chats       *mongo.Collection
 }
 
-type mongodb struct {
-	// Ctx              context.Context
-	// Client           *mongo.Client
-	UserCollection   *mongo.Collection
-	MsgCollection    *mongo.Collection
-	ServerCollection *mongo.Collection
-}
+func MongoDBConnectV3(env *ENV) (*MongoDB, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	var mongoClient *mongo.Client
+	var err error
 
-func MongoInit(mongoIP string, username string, password string) *mongodb {
-	var m mongodb
-	var cred options.Credential
-	cred.Username = username
-	cred.Password = password
+	if env.MongoDBConnectionMethod == "manual" {
+		credential := options.Credential{
+			Username: env.MongoDBUsername,
+			Password: env.MongoDBPassword,
+		}
 
-	// ctx := context.TODO()
-	clientOptions := options.Client().ApplyURI("mongodb://" + mongoIP + ":27017").SetAuth(cred)
-	client, err := mongo.Connect(context.TODO(), clientOptions)
-	if err != nil {
-		log.Fatal(err)
+		clientOptions := options.Client().ApplyURI("mongodb://" + env.MongoDBHost + ":" + env.MongoDBPort).SetAuth(credential)
+		mongoClient, err = mongo.Connect(ctx, clientOptions)
+		if err != nil {
+			defer cancel()
+			return nil, err
+		}
+	} else if env.MongoDBConnectionMethod == "auto" {
+		serverAPIOptions := options.ServerAPI(options.ServerAPIVersion1)
+		clientOptions := options.Client().ApplyURI(env.MongoDBConnectionString).SetServerAPIOptions(serverAPIOptions)
+		mongoClient, err = mongo.Connect(ctx, clientOptions)
+		if err != nil {
+			defer cancel()
+			return nil, err
+		}
 	}
-	err = client.Ping(context.TODO(), nil)
+	err = mongoClient.Ping(ctx, nil)
 	if err != nil {
-		log.Fatal(err)
+		defer cancel()
+		return nil, err
 	}
 
-	// var sKey string = "aeofh2983rh293hf2infd20i3fjd023j"
+	var mongodb MongoDB
 
-	uCollection := client.Database("Users").Collection("UserDatas")
-	mCollection := client.Database("messages").Collection("userMsg")
-	// m.Client = client
-	// m.Ctx = ctx
-	m.UserCollection = uCollection
-	m.MsgCollection = mCollection
+	images := mongoClient.Database("images")
+	mongodb.PostImage = images.Collection("post")
+	mongodb.AvatarImage = images.Collection("avatar")
 
-	// m.AddServerDetails(sKey)
+	storage := mongoClient.Database("storage")
+	mongodb.Users = storage.Collection("users")
+	mongodb.Posts = storage.Collection("posts")
+	mongodb.Frequnecy = storage.Collection("userFrequencyTable")
 
-	fmt.Println("Mongo client connected!")
+	messaging := mongoClient.Database("messages")
+	mongodb.Chats = messaging.Collection("chats")
 
-	return &m
+	defer cancel()
+	return &mongodb, nil
 }
 
-type redisdb struct {
-	Client *redis.Client
-}
-
-func RedisInit(redisIP string) *redisdb {
-	var r redisdb
-	client := redis.NewClient(&redis.Options{
-		Addr:     redisIP + ":6379",
+func RedisInit(env *ENV) (*redis.Client, error) {
+	options := redis.Options{
+		Addr:     env.RedisHost + ":" + env.RedisPort,
 		Password: "",
 		DB:       0,
-	})
-	s := client.Ping()
-	fmt.Println(s.String())
-
-	r.Client = client
-	fmt.Println("Redis client connected!")
-	return &r
+	}
+	client := redis.NewClient(&options)
+	ping := client.Ping()
+	if ping.Err() != nil {
+		return nil, ping.Err()
+	}
+	return client, nil
 }

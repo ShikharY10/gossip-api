@@ -2,87 +2,47 @@ package main
 
 import (
 	"log"
-	"net/http"
-	"os"
 
+	"github.com/ShikharY10/gbAPI/api"
 	"github.com/ShikharY10/gbAPI/config"
-	"github.com/ShikharY10/gbAPI/models"
-	"github.com/ShikharY10/gbAPI/routes"
-	"github.com/gorilla/mux"
-
-	"github.com/joho/godotenv"
+	"github.com/ShikharY10/gbAPI/handler"
+	"github.com/ShikharY10/gbAPI/logger"
+	"github.com/gin-gonic/gin"
 )
-
-func home(w http.ResponseWriter, r *http.Request) {
-	w.Write([]byte("Gossip API Test Home Route..."))
-}
 
 func main() {
 
-	// LOADING ENVIRONMENT VARIABLES
-	godotenv.Load()
+	gin.SetMode(gin.ReleaseMode)
+	ENV := config.LoadENV()
 
-	mongoIP, found := os.LookupEnv("MONGO_LOC_IP")
-	if !found {
-		panic("key -> MONGO_LOC_IP is not found in .env")
+	logging, err := logger.InitializeLogger(ENV, "API")
+	if err != nil {
+		log.Fatal(err)
 	}
 
-	rabbitIP, found := os.LookupEnv("RABBITMQ_LOC_IP")
-	if !found {
-		panic("key -> RABBITMQ_LOC_IP is not found in .env")
+	mongoDB, err := config.MongoDBConnectV3(ENV)
+	if err != nil {
+		log.Fatal(err)
 	}
 
-	redisIP, found := os.LookupEnv("REDIS_LOC_IP")
-	if !found {
-		panic("key -> REDIS_LOC_IP is not found in .env")
+	redisDB, err := config.RedisInit(ENV)
+	if err != nil {
+		log.Fatal(err)
 	}
 
-	rabbitUsername, found := os.LookupEnv("RABBITMQ_USERNAME")
-	if !found {
-		panic("key -> RABBITMQ_USERNAME is not found in .env")
+	rabbitMQ, err := config.RabbitInit(ENV)
+	if err != nil {
+		log.Fatal(err)
 	}
 
-	rabbitPassword, found := os.LookupEnv("RABBITMQ_PASSWORD")
-	if !found {
-		panic("key -> RABBITMQ_PASSWORD is not found in .env")
+	handle := &handler.Handler{
+		CacheHandler: handler.CreateCacheHandler(redisDB, logging),
+		MsgHandler:   handler.CreateMsgHandler(mongoDB.Chats, logging),
+		QueueHandler: handler.CreateQueueHandler(rabbitMQ.Channel, logging),
+		PostHandler:  handler.CreatePostHandler(mongoDB.Posts, mongoDB.PostImage, logging),
+		UserHandler:  handler.CreateUserHandler(mongoDB.Users, mongoDB.AvatarImage, mongoDB.Frequnecy, logging),
+		ImageHandler: handler.CreateImageHandler(mongoDB.PostImage, mongoDB.AvatarImage, logging),
 	}
 
-	mongoUsername, found := os.LookupEnv("MONGO_USERNAME")
-	if !found {
-		panic("key -> MONGO_USERNAME is not found in .env")
-	}
-
-	mongoPassword, found := os.LookupEnv("MONGO_PASSWORD")
-	if !found {
-		panic("key -> MONGO_PASSWORD is not found in .env")
-	}
-
-	serverIP, found := os.LookupEnv("SERVER_LOC_IP")
-	if !found {
-		panic("key -> SERVER_LOC_IP is not found in .env")
-	}
-
-	mongoDB := config.MongoInit(mongoIP, mongoUsername, mongoPassword)
-	redisDB := config.RedisInit(redisIP)
-	rabbitMQ := config.RabbitInit(rabbitIP, rabbitUsername, rabbitPassword)
-
-	var redisModel models.Redis = models.CreateMainRedisModel(redisDB.Client)
-	var userModel models.UserModel = models.CreateUserModel(mongoDB.UserCollection)
-	var msgModel models.MsgModel = models.CreateMsgModel(mongoDB.MsgCollection)
-
-	var m config.MAIN
-	m.MsgModel = &msgModel
-	m.UserModel = &userModel
-	m.RedisModel = &redisModel
-	m.RMQ = rabbitMQ
-
-	mainRouter := mux.NewRouter().StrictSlash(true)
-	// Test Home Routes
-	mainRouter.HandleFunc("/", home).Methods("GET")
-
-	routes.Version1API(mainRouter, m)
-	routes.Version2API(mainRouter, m)
-	routes.Version3API(mainRouter, m)
-
-	log.Fatal(http.ListenAndServe(serverIP+":8080", mainRouter))
+	api.StartVersionThreeAPIs(handle, ENV, logging)
 }
