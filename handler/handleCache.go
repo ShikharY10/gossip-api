@@ -6,6 +6,7 @@ import (
 	"log"
 	"math/rand"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/ShikharY10/gbAPI/logger"
@@ -89,19 +90,6 @@ func (r *CacheHandler) GetUserServerName(id int) int {
 	return i
 }
 
-// func (r *CacheHandler) GetUserMsg(id int) (string, error) {
-// 	key := strconv.Itoa(id)
-// 	s :
-// 	var r CacheHandler
-// 	r.Client = client
-// 	return r= r.Client.LPop(key)
-// 	str, err := s.Result()
-// 	if err != nil {
-// 		panic(err)
-// 	}
-// 	return str, nil
-// }
-
 func (r *CacheHandler) SetUserMsg(id int, msg string) error {
 	key := strconv.Itoa(id)
 	s := r.Client.RPush(key, msg)
@@ -153,4 +141,51 @@ func (r *CacheHandler) GetEngineName() []string {
 		return []string{}
 	}
 	return engines
+}
+
+// ===============TOKEN FUNCTIONS===========================================
+
+// Return true if token is not expired and saved hash of part of token is match is supplied token hash.
+func (c *CacheHandler) IsTokenValid(id string, token string, tokenType string) bool {
+	var key string
+	if tokenType == "access" {
+		key = id + ".accessTokenExpiry"
+	} else if tokenType == "refresh" {
+		key = id + ".refreshTokenExpiry"
+	}
+
+	if key == "" {
+		return false
+	}
+
+	hash := strings.Split(token, ".")[2]
+
+	result := c.Client.Get(key)
+	return result.Val() == hash
+}
+
+// Saves token's hash part and set a expiry as specified in Redis Cache.
+func (c *CacheHandler) SetAccessTokenExpiry(id string, token string, accessTokenExpiry time.Duration) error {
+	hash := strings.Split(token, ".")[2]
+	result1 := c.Client.Set(id+".accessTokenExpiry", hash, accessTokenExpiry)
+	if result1.Err() != nil {
+		return result1.Err()
+	}
+	return nil
+}
+
+// Saves token's hash part and set a expiry as specified in Redis Cache.
+func (c *CacheHandler) SetRefreshTokenExpiry(id string, token string, refreshTokenExpiry time.Duration) error {
+	hash := strings.Split(token, ".")[2]
+	result2 := c.Client.Set(id+".refreshTokenExpiry", hash, refreshTokenExpiry)
+	if result2.Err() != nil {
+		return result2.Err()
+	}
+	return nil
+}
+
+// Deletes both refresh and access token from redis cache
+func (c *CacheHandler) DeleteTokenExpiry(id string) {
+	c.Client.Del(id + ".accessTokenExpiry")
+	c.Client.Del(id + ".refreshTokenExpiry")
 }

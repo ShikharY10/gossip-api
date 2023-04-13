@@ -8,7 +8,7 @@ import (
 
 func PostRoute(router *gin.RouterGroup, api_v3 *v1.PostController) {
 	post := router.Group("/api/v3/post/s")
-	post.Use(api_v3.Middleware.APIV3Authorization())
+	post.Use(api_v3.Middleware.APIV1_Authorization())
 
 	post.POST("/post", api_v3.CreateNewPost)
 	post.DELETE("/post/:id", api_v3.DeletePost)

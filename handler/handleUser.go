@@ -176,7 +176,7 @@ func (um *UserHandler) GetUserDetails(id string, level string) (map[string]inter
 			"name":      users[0].Name,
 			"username":  users[0].Username,
 			"avatar":    users[0].Avatar,
-			"massageId": users[0].MessageID,
+			"massageId": users[0].DeliveryId,
 			"partners":  users[0].Partners,
 			"posts":     users[0].Posts,
 			"updatedAt": users[0].UpdatedAt,
@@ -195,6 +195,41 @@ func (um *UserHandler) GetUserDetails(id string, level string) (map[string]inter
 	}
 }
 
+func (um *UserHandler) GetUsersData(filter bson.M, findOption *options.FindOptions) (*[]models.User, error) {
+	cursor, err := um.userCollection.Find(context.TODO(), filter, findOption)
+	if err != nil {
+		return nil, err
+	}
+
+	var users []models.User
+	err = cursor.All(context.TODO(), &users)
+	if err != nil {
+		return nil, err
+	}
+
+	if len(users) > 0 {
+		return &users, nil
+	}
+	return nil, errors.New("no document found")
+}
+
+func (um *UserHandler) GetUserData(filter bson.M, findOptions *options.FindOneOptions) (*models.User, error) {
+	cursor := um.userCollection.FindOne(context.TODO(), filter, findOptions)
+
+	if cursor.Err() != nil {
+		return nil, cursor.Err()
+	}
+
+	var user models.User
+	err := cursor.Decode(&user)
+	if err != nil {
+		return nil, err
+	} else {
+
+		return &user, nil
+	}
+}
+
 // https://res.cloudinary.com/shikhar-lco/image/upload/h_800,w_600/c_scale,w_0.50/v1677949704/gb-profile_pic/pcmqsrqqrrn68skfx55k.jpg
 // https://res.cloudinary.com/shikhar-lco/image/ upload /v1677949704/gb-profile_pic/pcmqsrqqrrn68skfx55k.jpg
 func (um *UserHandler) GetUserAvatar(id string, width string, height string, scale string) ([]byte, error) {
@@ -203,20 +238,29 @@ func (um *UserHandler) GetUserAvatar(id string, width string, height string, sca
 		return nil, err
 	}
 
-	cursor := um.userCollection.FindOne(
-		context.TODO(),
-		bson.M{"_id": _id},
-	)
+	opts := options.FindOne().SetProjection(bson.D{
+		{Key: "avatar", Value: 1},
+	})
 
-	var avatarPicker models.AvatarPicker
-	err = cursor.Decode(&avatarPicker)
+	user, err := um.GetUserData(bson.M{"_id": _id}, opts)
 	if err != nil {
 		return nil, err
 	}
 
-	fmt.Println("SecureUrl: ", avatarPicker.Avatar.SecureUrl)
+	// cursor := um.userCollection.FindOne(
+	// 	context.TODO(),
+	// 	bson.M{"_id": _id},
+	// )
 
-	splited := strings.Split(avatarPicker.Avatar.SecureUrl, "upload")
+	// var avatarPicker models.AvatarPicker
+	// err = cursor.Decode(&avatarPicker)
+	// if err != nil {
+	// 	return nil, err
+	// }
+
+	fmt.Println("SecureUrl: ", user.Avatar.SecureUrl)
+
+	splited := strings.Split(user.Avatar.SecureUrl, "upload")
 	url := splited[0] + "upload"
 
 	if width != "" && height != "" {
@@ -231,15 +275,28 @@ func (um *UserHandler) GetUserAvatar(id string, width string, height string, sca
 
 	url = url + splited[1]
 
+	fmt.Println("URL: ", url)
+
 	response, err := http.Get(url)
 	if err != nil {
 		return nil, err
 	}
 
-	bodyBytes, err := ioutil.ReadAll(response.Body)
-	response.Body.Close()
+	fmt.Println("statusCode: ", response.StatusCode)
 
-	return bodyBytes, nil
+	if response.StatusCode == 200 {
+		bodyBytes, err := ioutil.ReadAll(response.Body)
+		if err != nil {
+			return nil, err
+		}
+
+		fmt.Println("bodyBytes: ", bodyBytes)
+		response.Body.Close()
+
+		return bodyBytes, nil
+	} else {
+		return nil, errors.New("something went wrong")
+	}
 
 }
 

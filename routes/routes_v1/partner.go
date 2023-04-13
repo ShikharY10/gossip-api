@@ -8,7 +8,7 @@ import (
 func PartnerRoute(router *gin.RouterGroup, api_v3 *v1.PartnerController) {
 
 	authorizedRoutes := router.Group("/a")
-	authorizedRoutes.Use(api_v3.Middleware.APIV3Authorization())
+	authorizedRoutes.Use(api_v3.Middleware.APIV1_Authorization())
 	authorizedRoutes.GET("/searchusername", api_v3.SearchUsername)
 	authorizedRoutes.POST("/partnerrequest", api_v3.PartnerRequest)
 	authorizedRoutes.POST("partnerresponse", api_v3.PartnerResponse)
