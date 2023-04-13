@@ -18,9 +18,8 @@ func StartVersionThreeAPIs(handle *handler.Handler, env *config.ENV, logging *lo
 	var cloudinary config.Cloudinary = config.InitCloudinary()
 
 	var authorization middleware.Middleware
-	authorization.UserHandler = handle.UserHandler
-	authorization.CacheHandler = handle.CacheHandler
-	authorization.SecretKey = []byte(env.JWTSecret)
+	authorization.Cache = handle.CacheHandler
+	authorization.JWT_ACCESS_TOKEN_SECRET_KEY = []byte(env.JWT_ACCESS_TOKEN_SECRET_KEY)
 
 	var api_v3 controllers.API_V3
 	api_v3.Handler = handle
@@ -35,7 +34,7 @@ func StartVersionThreeAPIs(handle *handler.Handler, env *config.ENV, logging *lo
 	)
 
 	router := gin.New()
-	v3Router := router.Group("/api/v3")
+	v3Router := router.Group("/api/v1")
 
 	router.GET("/", testRoutes)
 

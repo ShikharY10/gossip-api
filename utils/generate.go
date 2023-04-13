@@ -20,7 +20,6 @@ func (f *Generator) GenerateUserData(userCollection *mongo.Collection, quantity 
 		var user models.User
 		user.Avatar = models.Avatar{
 			PublicId:  randomString(10),
-			FileName:  randomString(6),
 			SecureUrl: GenerateRandomId() + "/" + randomString(6),
 		}
 		user.CreatedAt = createdAt
@@ -30,10 +29,10 @@ func (f *Generator) GenerateUserData(userCollection *mongo.Collection, quantity 
 		user.PartnerRequests = []models.PartnerRequest{}
 		user.Partners = []primitive.ObjectID{}
 		user.ID = objectIDs[i]
-		user.Logout = rand.Int()%2 == 0
+		// user.Logout = rand.Int()%2 == 0
 		user.Name = randomString(6) + " " + randomString(4)
 		user.Role = "user"
-		user.Token = randomString(20)
+		// user.Token = randomString(20)
 		user.UpdatedAt = createdAt
 		user.Username = randomString(5)
 		userCollection.InsertOne(context.TODO(), user)

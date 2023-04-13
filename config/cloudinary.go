@@ -95,7 +95,6 @@ func (cloud *Cloudinary) UploadUserAvatar(tempName string, imageData string, ext
 	os.Remove("temp/" + tempName + "." + extension)
 
 	var avatar models.Avatar
-	avatar.FileName = ""
 	// avatar.Height = strconv.Itoa(uploadParam.Height)
 	avatar.PublicId = uploadParam.PublicID
 	avatar.SecureUrl = uploadParam.SecureURL

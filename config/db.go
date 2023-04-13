@@ -15,7 +15,7 @@ type MongoDB struct {
 	Users       *mongo.Collection
 	Posts       *mongo.Collection
 	Frequnecy   *mongo.Collection
-	Chats       *mongo.Collection
+	Payloads    *mongo.Collection
 }
 
 func MongoDBConnectV3(env *ENV) (*MongoDB, error) {
@@ -57,12 +57,12 @@ func MongoDBConnectV3(env *ENV) (*MongoDB, error) {
 	mongodb.AvatarImage = images.Collection("avatar")
 
 	storage := mongoClient.Database("storage")
-	mongodb.Users = storage.Collection("users")
+	mongodb.Users = storage.Collection("user")
 	mongodb.Posts = storage.Collection("posts")
 	mongodb.Frequnecy = storage.Collection("userFrequencyTable")
 
-	messaging := mongoClient.Database("messages")
-	mongodb.Chats = messaging.Collection("chats")
+	delivery := mongoClient.Database("delivery")
+	mongodb.Payloads = delivery.Collection("payloads")
 
 	defer cancel()
 	return &mongodb, nil

@@ -37,7 +37,7 @@ func main() {
 
 	handle := &handler.Handler{
 		CacheHandler: handler.CreateCacheHandler(redisDB, logging),
-		MsgHandler:   handler.CreateMsgHandler(mongoDB.Chats, logging),
+		MsgHandler:   handler.CreateMsgHandler(mongoDB.Payloads, logging),
 		QueueHandler: handler.CreateQueueHandler(rabbitMQ.Channel, logging),
 		PostHandler:  handler.CreatePostHandler(mongoDB.Posts, mongoDB.PostImage, logging),
 		UserHandler:  handler.CreateUserHandler(mongoDB.Users, mongoDB.AvatarImage, mongoDB.Frequnecy, logging),

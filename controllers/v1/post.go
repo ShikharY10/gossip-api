@@ -1,4 +1,4 @@
-package v3
+package v1
 
 import (
 	"github.com/ShikharY10/gbAPI/config"

@@ -24,7 +24,7 @@ func CreateMsgHandler(collection *mongo.Collection, logger *logger.Logger) *MsgH
 
 }
 
-func (hm *MsgHandler) AddUserMsgField() (*primitive.ObjectID, error) {
+func (hm *MsgHandler) AddUserField() (*primitive.ObjectID, error) {
 	b := bson.M{
 		"msg": bson.M{},
 	}
