@@ -22,7 +22,7 @@ type PartnerController struct {
 }
 
 func (v3 *PartnerController) SearchUsername(c *gin.Context) {
-	username := c.Query("q")
+	username := c.Query("username")
 	if username == "" {
 		c.AbortWithStatus(http.StatusBadRequest)
 	} else {
@@ -35,7 +35,7 @@ func (v3 *PartnerController) SearchUsername(c *gin.Context) {
 	}
 }
 
-func (v3 *PartnerController) PartnerRequest(c *gin.Context) { // Post Request
+func (v3 *PartnerController) MakePartnerRequest(c *gin.Context) { // Post Request
 	// setting response headers
 	c.Header("Content-Type", "application/json")
 	c.Header("service", "Gossip API")
@@ -50,32 +50,44 @@ func (v3 *PartnerController) PartnerRequest(c *gin.Context) { // Post Request
 		// add request detail to sender part of db
 		err = v3.Handler.UserHandler.SetNewFollowRequest(request.RequesterId, "partnerrequested", request)
 		if err != nil {
-			c.AbortWithStatusJSON(400, "SENDER ERROR: "+err.Error())
+			c.AbortWithStatusJSON(400, gin.H{
+				"statusstring": err.Error(),
+			})
 		} else {
 			// add request detail to target part of db
 			err = v3.Handler.UserHandler.SetNewFollowRequest(request.TargetId, "partnerrequests", request)
 			if err != nil {
-				c.AbortWithStatusJSON(400, "Target ERROR: "+err.Error())
+				c.AbortWithStatusJSON(400, gin.H{
+					"statusstring": err.Error(),
+				})
 			} else {
 				jsonBytes, err := json.Marshal(request)
 				if err != nil {
-					c.AbortWithStatus(500)
+					c.AbortWithStatusJSON(500, gin.H{
+						"statusstring": err.Error(),
+					})
 				} else {
 					payload := schema.Payload{
 						Data: jsonBytes,
-						Type: "021",
+						Type: "011",
 					}
 					bpBytes, err := proto.Marshal(&payload)
 					if err != nil {
-						c.AbortWithStatus(500)
+						c.AbortWithStatusJSON(500, gin.H{
+							"statusstring": err.Error(),
+						})
 					} else {
 						// send request detail to gossip_engine
 						engineName, err := v3.Handler.CacheHandler.GetEngineChannel()
 						if err != nil {
-							c.AbortWithStatusJSON(http.StatusInternalServerError, "intarnal server error")
+							c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{
+								"statusstring": err.Error(),
+							})
 						} else {
 							v3.Handler.QueueHandler.Produce(engineName, bpBytes)
-							c.JSON(200, "")
+							c.JSON(200, gin.H{
+								"statusstring": "successfull",
+							})
 						}
 					}
 				}
@@ -84,7 +96,7 @@ func (v3 *PartnerController) PartnerRequest(c *gin.Context) { // Post Request
 	}
 }
 
-func (v3 *PartnerController) PartnerResponse(c *gin.Context) {
+func (v3 *PartnerController) MakePartnerResponse(c *gin.Context) {
 	// setting response headers
 	c.Header("Content-Type", "application/json")
 	c.Header("service", "Gossip API")
@@ -94,25 +106,33 @@ func (v3 *PartnerController) PartnerResponse(c *gin.Context) {
 	err := c.BindJSON(&request)
 
 	if err != nil {
-		c.AbortWithStatus(400)
+		c.AbortWithStatusJSON(400, gin.H{
+			"statusstring": err.Error(),
+		})
 	} else {
 		if request.IsAccepted {
 			// Step1: insert responserId to target's partner section in db
 			err := v3.Handler.UserHandler.SetNewPartner(request.TargetId, request.ResponserId)
 			if err != nil {
-				c.AbortWithStatus(http.StatusInternalServerError)
+				c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{
+					"statusstring": err.Error(),
+				})
 				return
 			}
 			// Step2: insert targetId to responser's partner section in db
 			err = v3.Handler.UserHandler.SetNewPartner(request.ResponserId, request.TargetId)
 			if err != nil {
-				c.AbortWithStatus(http.StatusInternalServerError)
+				c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{
+					"statusstring": err.Error(),
+				})
 				return
 			}
 		}
 		jsonBytes, err := json.Marshal(request)
 		if err != nil {
-			c.AbortWithStatus(500)
+			c.AbortWithStatusJSON(500, gin.H{
+				"statusstring": err.Error(),
+			})
 		} else {
 			payload := schema.Payload{
 				Data: jsonBytes,
@@ -120,22 +140,28 @@ func (v3 *PartnerController) PartnerResponse(c *gin.Context) {
 			}
 			bpBytes, err := proto.Marshal(&payload)
 			if err != nil {
-				c.AbortWithStatus(500)
+				c.AbortWithStatusJSON(500, gin.H{
+					"statusstring": err.Error(),
+				})
 			} else {
 				// send request detail to gossip_engine
 				engineName, err := v3.Handler.CacheHandler.GetEngineChannel()
 				if err != nil {
-					c.AbortWithStatusJSON(http.StatusInternalServerError, "intarnal server error")
+					c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{
+						"statusstring": err.Error(),
+					})
 				} else {
 					v3.Handler.QueueHandler.Produce(engineName, bpBytes)
-					c.JSON(200, "")
+					c.JSON(200, gin.H{
+						"statusstring": "successfull",
+					})
 				}
 			}
 		}
 	}
 }
 
-func (v3 *PartnerController) UnFollow(c *gin.Context) {
+func (v3 *PartnerController) RemovePartner(c *gin.Context) {
 	// unfollow/:partnerid  <-- choosing
 
 	// setting response headers
@@ -147,23 +173,59 @@ func (v3 *PartnerController) UnFollow(c *gin.Context) {
 	if partnerId == "" {
 		c.AbortWithStatus(http.StatusBadRequest)
 	} else {
-		userId := c.Value("uuid").(string)
-		err := v3.Handler.UserHandler.RemovePartner(userId, partnerId)
-		if err != nil {
-			c.AbortWithStatus(500)
+		userId := c.Value("id").(string)
+		err1 := v3.Handler.UserHandler.RemovePartner(userId, partnerId)
+		err2 := v3.Handler.UserHandler.RemovePartner(partnerId, userId)
+		if err1 != nil && err2 != nil {
+			c.AbortWithStatusJSON(500, gin.H{
+				"statusstring": err1.Error() + " | " + err2.Error(),
+			})
 		} else {
-			c.JSON(200, "succesfully removed")
+			removePartnerInfo := gin.H{
+				"initiaterId": userId,
+				"targetId":    partnerId,
+			}
+			jsonBytes, err := json.Marshal(removePartnerInfo)
+			if err != nil {
+				c.AbortWithStatusJSON(500, gin.H{
+					"statusstring": err.Error(),
+				})
+				return
+			}
+			payload := schema.Payload{
+				Data: jsonBytes,
+				Type: "031",
+			}
+			bpBytes, err := proto.Marshal(&payload)
+			if err != nil {
+				c.AbortWithStatusJSON(500, gin.H{
+					"statusstring": err.Error(),
+				})
+			} else {
+				// send request detail to gossip_engine
+				engineName, err := v3.Handler.CacheHandler.GetEngineChannel()
+				if err != nil {
+					c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{
+						"statusstring": err.Error(),
+					})
+				} else {
+					v3.Handler.QueueHandler.Produce(engineName, bpBytes)
+					c.JSON(200, gin.H{
+						"statusstring": "successfull",
+					})
+				}
+			}
 		}
 	}
 }
 
-func (v3 *PartnerController) GetAllFollowers(c *gin.Context) {}
+func (v3 *PartnerController) GetAllPartners(c *gin.Context) {
 
-func (v3 *PartnerController) GetAllFollowing(c *gin.Context) {}
+}
 
-func (v3 *PartnerController) BlockFriend(c *gin.Context) {}
+func (v3 *PartnerController) BlockPartner(c *gin.Context) {}
 
-func (v3 *PartnerController) UnBlockFriend(c *gin.Context) {}
+func (v3 *PartnerController) UnBlockPartner(c *gin.Context) {}
 
 func (v3 *PartnerController) CheckForFriendExistance(c *gin.Context) {}
 
